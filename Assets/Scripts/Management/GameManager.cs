@@ -77,13 +77,23 @@ public class GameManager : Singleton<GameManager>
 		case GameStates.MainMenu:
 			break;
 		case GameStates.Playing:
-			if(Application.loadedLevel==0)
+#if UNITY_WEBPLAYER
+			if(Application.loadedLevel == 1 && Application.CanStreamedLevelBeLoaded(2))
 			{
-				Application.LoadLevel(1);
+				Application.LoadLevel(2);
+				_state = GameStates.MainMenu;
+			}
+			else if(Application.loadedLevel == 2)
+				PlayingUpdate();
+#elif UNITY_STANDALONE
+			if(Application.loadedLevel == 1)
+			{
+				Application.LoadLevel(2);
 				_state = GameStates.MainMenu;
 			}
 			else
 				PlayingUpdate();
+#endif
 			break;
 		case GameStates.GameOver:
 			break;
@@ -91,7 +101,8 @@ public class GameManager : Singleton<GameManager>
 			Application.Quit();
 			break;
 		case GameStates.Restart:
-			Application.LoadLevel (1);
+			//Just assuming that the level can be reloaded on web with no issues.
+			Application.LoadLevel (2);
 			_state = GameStates.Playing;
 			break;
 		}
@@ -104,7 +115,7 @@ public class GameManager : Singleton<GameManager>
 		case GameStates.MainMenu:
 			break;
 		case GameStates.Playing:
-			if(Application.loadedLevel == 1)
+			if(Application.loadedLevel == 2)
 				PlayingLateUpdate();
 			break;
 		case GameStates.GameOver:
@@ -115,14 +126,14 @@ public class GameManager : Singleton<GameManager>
 	private void FixedUpdate()
 	{
 		//Vector3.Cross(_bullet.transform.rigidbody.velocity, Vector3.forward
-		if(Application.loadedLevel == 1)
+		if(Application.loadedLevel == 2)
 			if(_state==GameStates.Playing && _remainingAmmo <= 0 && !_bullet.Dying)
 				_state = GameStates.GameOver;
 	}
 	
 	private void OnLevelWasLoaded(int level)
 	{
-		if(level==1)
+		if(level==2)
 		{
 			GalleryStart();
 			_state = GameStates.Playing;
