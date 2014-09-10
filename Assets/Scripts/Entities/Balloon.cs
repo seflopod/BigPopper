@@ -21,9 +21,9 @@ public class Balloon : MonoBehaviour
 	
 	private void OnCollisionEnter(Collision collision)
 	{
-		if(collision.gameObject.transform.name.Contains("Bullet"))
+		if(collision.gameObject.CompareTag("bullet"))
 		{
-			GameManager.Instance.BalloonHit(gameObject, transform.rigidbody.velocity, (Bullet) collision.gameObject.GetComponent<Bullet>());
+			GameManager.Instance.BalloonHit(gameObject, transform.rigidbody.velocity, collision.gameObject.GetComponent<Bullet>());
 		}
 	}
 }

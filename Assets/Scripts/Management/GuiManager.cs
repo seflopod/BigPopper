@@ -3,7 +3,6 @@ using System.Collections;
 
 public class GuiManager : Singleton<GuiManager>
 {
-	private GUITexture _reticle;
 	public Texture reloadBarBackground;
 	public Texture reloadBarForeground;
 	public GUISkin skin;
@@ -15,15 +14,11 @@ public class GuiManager : Singleton<GuiManager>
 	
 	private void Start()
 	{
-		_reticle = (GUITexture) gameObject.GetComponentInChildren<GUITexture>();
-		
 		_menuOptions = new string[] {"Play Game", "Quit"};
 		
 		//_rldBarWidth = reloadBarBackground.width;
 		_rldBarWidth = Screen.width;
 		_rldBarHeight = reloadBarBackground.height;
-		
-		_reticle.pixelInset = new Rect(Screen.width/2-16, Screen.height/2-16, 32.0f, 32.0f);
 	}
 	
 	private void OnGUI()
@@ -32,31 +27,48 @@ public class GuiManager : Singleton<GuiManager>
 		switch(GameManager.GameState)
 		{
 		case GameStates.MainMenu:
-			Screen.showCursor = true;
-			DisplayMainMenu();
+			if(GameManager.IS_WEB)
+			{
+				_menuOptions = new string[] {"Play Game", "Quit"};
+			}
+			else
+			{
+				_menuOptions = new string[] {"Play Game", "High Scores", "Quit"};
+			}
+			displayMainMenu();
 			break;
 		case GameStates.Playing:
-			Screen.showCursor = false;
-			DisplayHUD();
+			displayHUD();
 			break;
 		case GameStates.GameOver:
-			Screen.showCursor = true;
-			DisplayGameOver();
+			if(GameManager.IS_WEB)
+			{
+				_menuOptions = new string[] {"Play Again", "Main Menu"};
+			}
+			else
+			{
+				_menuOptions = new string[] {"Play Again", "High Scores", "Main Menu"};
+			}
+			displayGameOver();
+			break;
+		case GameStates.HighScores:
+			_menuOptions = new string[] {"Main Menu"};
+			displayHighScores();
 			break;
 		default:
 			break;
 		}
 	}
 	
-	private void DisplayMainMenu()
+	private void displayMainMenu()
 	{
-		_menuOptions = new string[] {"Play Game", "Quit"};
-		int choice = GUI.SelectionGrid(CenteredBox(Screen.width*0.4f, Screen.height*0.4f), -1, _menuOptions, 1);
+		Rect gridArea = new Rect(Screen.width*0.2f, Screen.height*0.4f, Screen.width*0.6f, Screen.height*0.4f);
+		int choice = GUI.SelectionGrid(gridArea, -1, _menuOptions, 1);
 		GameManager.Instance.MenuSelect(choice);
 		
 	}
 	
-	private void DisplayHUD()
+	private void displayHUD()
 	{
 		string hitStr = string.Format("Balloons Hit: {0}", GameManager.Instance.BalloonsHit);
 		string scoreStr = string.Format("Score: {0}", GameManager.Instance.Score);
@@ -67,10 +79,10 @@ public class GuiManager : Singleton<GuiManager>
 		GUI.Box((new Rect(0.0f,20.0f,w,h)), hitStr);
 		GUI.Box((new Rect(Screen.width*0.33f,20.0f,w,h)), scoreStr);
 		GUI.Box((new Rect(Screen.width*0.67f,20.0f,w,h)), ammoStr);
-		DrawReloadTimer();
+		drawReloadTimer();
 	}
 	
-	private void DrawReloadTimer()
+	private void drawReloadTimer()
 	{
 		float pct = 1 -
 			GameManager.Instance.ReloadTimer.TimeRemaining/GameManager.Instance.ReloadTimer.Length;
@@ -85,31 +97,35 @@ public class GuiManager : Singleton<GuiManager>
 	}
 	
 	
-	private void DisplayGameOver()
+	private void displayGameOver()
 	{
-		_menuOptions = new string[] {"Play Again", "Quit"};
-		Rect textArea = CenteredBox (Screen.width*0.4f, Screen.height*0.2f);
-		Rect inertArea = new Rect(textArea.x, textArea.y, textArea.width, textArea.height*0.2f);
-		Rect selectionArea = new Rect(inertArea.x, inertArea.y+textArea.height*0.25f,
-										textArea.width, textArea.height*0.75f);
+		Rect textArea = centeredBox (Screen.width*0.2f, Screen.height*0.2f);
+		Rect inertArea = new Rect(textArea.x, textArea.y, textArea.width, textArea.height*0.25f);
+		Rect selectionArea = new Rect(inertArea.x, inertArea.y+textArea.height*0.3f,
+										textArea.width, textArea.height*0.7f);
 		GUI.Box(inertArea, string.Format("Game Over\nScore: {0}", GameManager.Instance.Score));
 		int choice = GUI.SelectionGrid(selectionArea, -1, _menuOptions, 1);
 		GameManager.Instance.MenuSelect(choice);		
 	}
+
+	private void displayHighScores()
+	{
+
+		Rect fullArea = centeredBox(Screen.width*1f/9f, Screen.height*0.2f);
+		Rect inertArea = new Rect(fullArea.x, fullArea.y, fullArea.width, fullArea.height*0.75f);
+		Rect selectionArea = new Rect(inertArea.x, inertArea.y+fullArea.height*0.8f,
+		                              fullArea.width, fullArea.height*0.2f);
+		GUI.Box(inertArea, GameManager.Instance.HighScores.ToString());
+		int choice = GUI.SelectionGrid(selectionArea, -1, _menuOptions, 1);
+		GameManager.Instance.MenuSelect(choice);
+	}
 	
-	private Rect CenteredBox(float sideMargin, float topMargin)
+	private Rect centeredBox(float sideMargin, float topMargin)
 	{
 		float width = Screen.width - 2*sideMargin;
 		float height = Screen.height - 2*topMargin;
 		float x = sideMargin;
 		float y = topMargin;
 		return new Rect(x, y, width, height);
-	}
-	
-	public void UpdateReticle(Vector3 newPosition)
-	{
-		//need to offset by half texture size to center on actual position
-		if(GameManager.GameState == GameStates.Playing)
-			_reticle.pixelInset = new Rect(newPosition.x-16.0f, newPosition.y-16.0f, 32.0f, 32.0f);
 	}
 }

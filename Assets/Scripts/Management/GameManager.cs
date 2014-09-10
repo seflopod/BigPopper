@@ -3,17 +3,25 @@ using System.Collections.Generic;
 
 public enum GameStates
 {
-	MainMenu = 0x01,
-	Playing = 0x02,
-	GameOver = 0x04,
-	Quit = 0x08,
-	Restart = 0xF0
+	Preload,
+	MainMenu,
+	Playing,
+	GameOver,
+	HighScores,
+	Quit,
+	Restart
 };
 
 [RequireComponent(typeof(InputController))]
 [RequireComponent(typeof(GuiManager))]
 public class GameManager : Singleton<GameManager>
 {
+#if UNITY_WEBPLAYER
+	public static readonly bool IS_WEB = true;
+#else
+	public static readonly bool IS_WEB = false;
+#endif
+
 	#region public_variables
 	public int balloonsAtStart = 5;
 	public int maxBalloons = 10;
@@ -32,6 +40,7 @@ public class GameManager : Singleton<GameManager>
 	
 	#region private_variables
 	private GameStates _state;
+	private GUITexture _progBar;
 	
 	private Timer _reloadTimer;
 	private Timer _balloonSpawnTimer;
@@ -52,48 +61,72 @@ public class GameManager : Singleton<GameManager>
 	private float _score;
 	private int _blnMatIdx;
 	private float[] _freq;
+
+	private HighScoreManager _highScores;
 	#endregion
 	
 	#region unity_funcs
 	protected override void Awake()
 	{
 		base.Awake();
+		_state = GameStates.Preload;
 		DontDestroyOnLoad(gameObject);
 	}
 	
 	private void Start()
 	{
-		_state = GameStates.MainMenu;
-		_mainCamera = Camera.main;
-		_freq = GenerateFreqTable(balloonMaterials.Count);
-		for(int i=0;i<25;++i)
-			InstantiateBalloon();
+		_progBar = GameObject.FindGameObjectWithTag("ProgBar").GetComponent<GUITexture>();
+		if(!IS_WEB)
+		{
+			_highScores = HighScoreManager.LoadHighScores();
+		}
 	}
 	
 	private void Update()
 	{
 		switch(_state)
 		{
+		case GameStates.Preload:
+			preloadUpdate();
+			break;
 		case GameStates.MainMenu:
+			if(Application.loadedLevel != 1)
+			{
+				if(IS_WEB && Application.CanStreamedLevelBeLoaded(1))
+				{
+					Application.LoadLevel(1);
+				}
+				else
+				{
+					Application.LoadLevel(1);
+				}
+			}
 			break;
 		case GameStates.Playing:
-#if UNITY_WEBPLAYER
-			if(Application.loadedLevel == 1 && Application.CanStreamedLevelBeLoaded(2))
+			if(IS_WEB)
 			{
-				Application.LoadLevel(2);
-				_state = GameStates.MainMenu;
-			}
-			else if(Application.loadedLevel == 2)
-				PlayingUpdate();
-#elif UNITY_STANDALONE
-			if(Application.loadedLevel == 1)
-			{
-				Application.LoadLevel(2);
-				_state = GameStates.MainMenu;
+				if(Application.loadedLevel == 1 && Application.CanStreamedLevelBeLoaded(2))
+				{
+					Application.LoadLevel(2);
+					_state = GameStates.MainMenu;
+				}
+				else if(Application.loadedLevel == 2)
+				{
+					playingUpdate();
+				}
 			}
 			else
-				PlayingUpdate();
-#endif
+			{
+				if(Application.loadedLevel == 1)
+				{
+					Application.LoadLevel(2);
+					_state = GameStates.MainMenu;
+				}
+				else
+				{
+					playingUpdate();
+				}
+			}
 			break;
 		case GameStates.GameOver:
 			break;
@@ -101,9 +134,16 @@ public class GameManager : Singleton<GameManager>
 			Application.Quit();
 			break;
 		case GameStates.Restart:
-			//Just assuming that the level can be reloaded on web with no issues.
-			Application.LoadLevel (2);
-			_state = GameStates.Playing;
+			if(IS_WEB && Application.CanStreamedLevelBeLoaded(2))
+			{
+				Application.LoadLevel(2);
+				_state = GameStates.Playing;
+			}
+			else
+			{
+				Application.LoadLevel(2);
+				_state = GameStates.Playing;
+			}
 			break;
 		}
 	}
@@ -116,7 +156,9 @@ public class GameManager : Singleton<GameManager>
 			break;
 		case GameStates.Playing:
 			if(Application.loadedLevel == 2)
-				PlayingLateUpdate();
+			{
+				playingLateUpdate();
+			}
 			break;
 		case GameStates.GameOver:
 			break;
@@ -125,43 +167,73 @@ public class GameManager : Singleton<GameManager>
 	
 	private void FixedUpdate()
 	{
-		//Vector3.Cross(_bullet.transform.rigidbody.velocity, Vector3.forward
-		if(Application.loadedLevel == 2)
-			if(_state==GameStates.Playing && _remainingAmmo <= 0 && !_bullet.Dying)
-				_state = GameStates.GameOver;
+		if(Application.loadedLevel == 2 && _state == GameStates.Playing && _remainingAmmo <= 0 && !_bullet.Dying)
+		{
+			if(!IS_WEB)
+			{
+				ScoreData sd;
+				sd.score = Mathf.FloorToInt(_score);
+				sd.name = "Player";
+				_highScores.AddScore(sd);
+				HighScoreManager.SaveHighScores(_highScores);
+			}
+			_state = GameStates.GameOver;
+		}
 	}
 	
 	private void OnLevelWasLoaded(int level)
 	{
-		if(level==2)
+		switch(level)
 		{
-			GalleryStart();
+		case 1:
+			initMainMenu();
+			break;
+		case 2:
+			initGallery();
 			_state = GameStates.Playing;
+			break;
+		default:
+			break;
 		}
 	}
 	#endregion
-	
+
+
 	#region case_specific_updates
-	private void MainMenuUpdate()
+	private void preloadUpdate()
 	{
+		if(IS_WEB)
+		{
+			if(Application.CanStreamedLevelBeLoaded(1))
+			{
+				Application.LoadLevel(1);
+			}
+			else
+			{
+				float prog = Application.GetStreamProgressForLevel(1);
+				Rect cur = _progBar.pixelInset;
+				cur.width = prog * Screen.width;
+				_progBar.pixelInset = cur;
+			}
+		}
+		else
+		{
+			Application.LoadLevel(1);
+		}
 	}
 	
-	private void PlayingUpdate()
+	private void playingUpdate()
 	{
 		if(_bullet.Fired && _reloadTimer.Expired && _remainingAmmo > 0)
-			LoadBullet();
+			loadBullet();
 	}
 	
-	private void GameOverUpdate()
-	{
-	}
-	
-	private void PlayingLateUpdate()
+	private void playingLateUpdate()
 	{
 		if(_balloonSpawnTimer.Expired)
 		{
 			if(_numBalloons < maxBalloons)
-				InstantiateBalloon();
+				instantiateBalloon();
 			
 			_balloonSpawnTimer.StartTimer();
 		}
@@ -175,11 +247,21 @@ public class GameManager : Singleton<GameManager>
 			}
 		}
 	}
-	
 	#endregion
 	
 	#region level_management
-	private void GalleryStart()
+	private void initMainMenu()
+	{
+		_state = GameStates.MainMenu;
+		_mainCamera = Camera.main;
+		_freq = GenerateFreqTable(balloonMaterials.Count);
+		for(int i=0;i<25;++i)
+		{
+			instantiateBalloon();
+		}
+	}
+
+	private void initGallery()
 	{
 		_remainingAmmo = maxBullets;
 		_railGunObj = (GameObject) GameObject.Instantiate(railGunData.railGunPrefab,
@@ -187,7 +269,7 @@ public class GameManager : Singleton<GameManager>
 															Quaternion.identity);
 		
 		for(int i=0;i<balloonsAtStart;++i)
-			InstantiateBalloon();
+			instantiateBalloon();
 		
 		_numBalloons = balloonsAtStart;
 		_curParticles = null;
@@ -198,9 +280,10 @@ public class GameManager : Singleton<GameManager>
 		_score = 0.0f;
 		_balloonsHit = 0;
 		_bonusShots = 0;
-		LoadBullet();
+		loadBullet();
 	}
 	#endregion
+
 	#region gui_proc
 	public void MenuSelect(int choice)
 	{
@@ -210,16 +293,46 @@ public class GameManager : Singleton<GameManager>
 		switch(_state)
 		{
 		case GameStates.MainMenu:
-			if(choice == 0)
+			switch(choice)
+			{
+			case 0:
 				_state = GameStates.Playing;
-			else
+				break;
+			case 1:
+				_state = GameStates.HighScores;
+				break;
+			case 2:
 				_state = GameStates.Quit;
+				break;
+			default:
+				break;
+			}
+			break;
+		case GameStates.HighScores:
+			switch(choice)
+			{
+			case 0:
+				_state = GameStates.MainMenu;
+				break;
+			default:
+				break;
+			}
 			break;
 		case GameStates.GameOver:
-			if(choice == 0)
+			switch(choice)
+			{
+			case 0:
 				_state = GameStates.Restart;
-			else
-				_state = GameStates.Quit;
+				break;
+			case 1:
+				_state = GameStates.HighScores;
+				break;
+			case 2:
+				_state = GameStates.MainMenu;
+				break;
+			default:
+				break;
+			}
 			break;
 		default:
 			break;
@@ -228,14 +341,14 @@ public class GameManager : Singleton<GameManager>
 	#endregion
 	
 	#region bullet_stuff
-	private void LoadBullet()
+	private void loadBullet()
 	{
 		GameObject tmpBullet = (GameObject) GameObject.Instantiate(bulletPrefab,
 																	Vector3.up,
 																	Quaternion.identity);			
 		_bullet = tmpBullet.GetComponent<Bullet>();
 		tmpBullet.transform.parent = _railGunObj.transform;
-		tmpBullet.transform.localScale = new Vector3(0.75f, 0.15f, 0.1875f);
+		//tmpBullet.transform.localScale = new Vector3(0.75f, 0.15f, 0.1875f);
 		tmpBullet.transform.localPosition = new Vector3(0.0f, 0.01805623f, -0.4f);
 		tmpBullet.transform.localRotation = Quaternion.identity;
 		_bullet.Fired = false;
@@ -265,7 +378,7 @@ public class GameManager : Singleton<GameManager>
 	#endregion
 	
 	#region balloon_stuff
-	private void InstantiateBalloon()
+	private void instantiateBalloon()
 	{
 		GameObject tmpBalloon = (GameObject) GameObject.Instantiate(balloonPrefab,
 																	new Vector3(
@@ -292,7 +405,7 @@ public class GameManager : Singleton<GameManager>
 	/// Rather than generate any possible color, this function sticks to the bright colors the tend
 	/// to be used for balloons.
 	/// </description>
-	private Color RandomBalloonColor()
+	private Color randBalloonColor()
 	{
 		float[] rndFlt = {1.0f/Random.Range(1,3),
 							(Random.Range(1,3)==2)?1.0f/Random.Range(1,3):0.0f,
@@ -331,7 +444,7 @@ public class GameManager : Singleton<GameManager>
 		}
 		++_balloonsHit;
 		
-		Vector3 pos = bln.transform.position;		
+		Vector3 pos = bln.transform.position;
 		DestroyBalloon(bln);
 		_curParticles = ((GameObject) GameObject.Instantiate(_balloonParticleObj, pos, Quaternion.identity)).GetComponent<ParticleSystem>();
 		//_curParticles.startColor = blnClr;
@@ -353,19 +466,23 @@ public class GameManager : Singleton<GameManager>
 		--_numBalloons;
 		GameObject.Destroy(bln);
 	}
-	
-	
 	#endregion
 	
 	
 	#region railgun_stuff
-	public void Aim(Vector3 mousePos)
+	public void Aim(Vector3 cursorPos)
 	{
-		mousePos.x = Mathf.Min(Screen.width, Mathf.Max(mousePos.x, 0.0f));
-		mousePos.y = Mathf.Min(Screen.height, Mathf.Max(mousePos.y, 0.0f));
-		mousePos.z = 64.0f;
-		GuiManager.Instance.UpdateReticle(mousePos);
-		Vector3 worldPos = _mainCamera.ScreenToWorldPoint(mousePos);
+		//if we don't have an object to aim, don't try to aim it
+		if(_railGunObj == null)
+		{
+			return;
+		}
+
+		cursorPos.x = Mathf.Min(Screen.width, Mathf.Max(cursorPos.x, 0.0f));
+		cursorPos.y = Mathf.Min(Screen.height, Mathf.Max(cursorPos.y, 0.0f));
+		cursorPos.z = 64.0f;
+		Vector3 worldPos = _mainCamera.ScreenToWorldPoint(cursorPos);
+
 		_railGunObj.transform.LookAt(worldPos);
 		
 		//180 is arbitrary here. B/c of the 360/0 issue, there's no good way to determine if
@@ -378,21 +495,39 @@ public class GameManager : Singleton<GameManager>
 		}
 	}
 	#endregion
-	
+
+	/**
+	 * This is used to create a roll list with a descending chance
+	 * index	probability		to roll
+	 * 0		0.5				0.5
+	 * 1		0.25			0.75
+	 * 2		0.125			0.875
+	 * ...
+	 * ele		1/2^(ele+1)		last to roll + 1/2^(ele+1)
+	 * 
+	 */
 	public float[] GenerateFreqTable(int ele)
 	{
 		float[] ret = new float[ele];
 		for(int i=0;i<ele;++i)
+		{
 			ret[i] = 1/Mathf.Pow(2, i+1) + ((i==0)?0:ret[i-1]);
+		}
 		return ret;
 	}
-	
+
+	/**
+	 * Grabs a random int in the range of [0,ele) based on a frequency table
+	 * 
+	 */
 	public int RandomFromTable(int ele)
 	{
 		float n = Random.value;
 		int result = 0;
 		while(result < ele && n > _freq[result])
+		{
 			result++;
+		}
 		return (result==ele)?ele-1:result; 
 	}
 	
@@ -401,6 +536,11 @@ public class GameManager : Singleton<GameManager>
 	public int BalloonsHit { get { return _balloonsHit; } }
 	public int BulletsLeft { get { return _remainingAmmo; } }
 	public Timer ReloadTimer { get { return _reloadTimer; } }
+	public HighScoreManager HighScores
+	{
+		get { return _highScores; }
+		set { _highScores = value; }
+	}
 	
 	public static Camera MainCamera { get { return Instance._mainCamera; } }
 	public static GameStates GameState { get { return Instance._state; } }

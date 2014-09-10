@@ -11,8 +11,10 @@ public class InputController : MonoBehaviour
 			break;
 		case GameStates.Playing:
 			GameManager.Instance.Aim(Input.mousePosition);
-			if(GameManager.Instance.ReloadTimer.Expired && Input.GetButtonDown("Fire1"))
+			if(GameManager.Instance.ReloadTimer != null && GameManager.Instance.ReloadTimer.Expired && Input.GetButtonDown("Fire1"))
+			{
 				GameManager.Instance.FireBullet();
+			}
 			break;
 		case GameStates.GameOver:
 			break;
